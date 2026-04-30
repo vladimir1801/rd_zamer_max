@@ -1,2 +1,3 @@
-python-telegram-bot==20.3
+maxapi
 Pillow==9.4.0
+aiohttp
