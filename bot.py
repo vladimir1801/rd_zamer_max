@@ -15,6 +15,7 @@ from maxapi.types import (
     MessageCreated,
     MessageCallback,
     BotStarted,
+    BotAdded,
     Command,
     CommandStart,
     RequestContactButton,
@@ -273,6 +274,14 @@ async def on_cancel(event: MessageCallback, context: MemoryContext):
 
 
 # ─── ENTRY POINTS ─────────────────────────────────────────────────────────────
+
+@dp.bot_added()
+async def bot_added(event: BotAdded):
+    await bot.send_message(
+        chat_id=event.chat_id,
+        text=f"Бот добавлен в чат!\nChat ID этого чата: {event.chat_id}\n\nСкопируйте это число и передайте разработчику для настройки бота."
+    )
+
 
 @dp.bot_started()
 async def bot_started(event: BotStarted):
