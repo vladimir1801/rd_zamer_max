@@ -220,19 +220,33 @@ def get_photo_url(attachments) -> str | None:
 
 
 def get_contact_phone(attachments) -> str | None:
-    """Extract phone number from MAX contact attachment.
-    NOTE: field names may need adjustment after testing."""
+    """Extract phone number from MAX contact attachment."""
     if not attachments:
         return None
     for att in attachments:
         att_type = getattr(att, 'type', None)
-        if att_type == 'contact':
+        logging.info("CONTACT_DEBUG attachment type=%s | repr=%s", att_type, repr(att))
+        # MAX API может вернуть тип 'contact' или 'share' — пробуем оба
+        if att_type in ('contact', 'share', None):
             payload = getattr(att, 'payload', None)
             if payload:
-                return (
-                    getattr(payload, 'phone', None)
-                    or getattr(payload, 'vcf_info', None)
-                )
+                logging.info("CONTACT_DEBUG payload attrs=%s", [a for a in dir(payload) if not a.startswith('_')])
+                # Прямое поле phone
+                phone = getattr(payload, 'phone', None)
+                if phone:
+                    return phone
+                # Поле vcf_info — полная VCF-карточка, нужно вытащить TEL
+                vcf = getattr(payload, 'vcf_info', None)
+                if vcf:
+                    logging.info("CONTACT_DEBUG vcf_info=%s", vcf)
+                    m = re.search(r'TEL[^:]*:([+\d\s\-()]+)', vcf)
+                    if m:
+                        return m.group(1).strip()
+                # Другие возможные поля
+                for field in ('contact_id', 'user_id', 'phone_number'):
+                    val = getattr(payload, field, None)
+                    if val:
+                        return str(val)
     return None
 
 
@@ -318,13 +332,21 @@ async def on_launch(event: MessageCallback, context: MemoryContext):
 @dp.message_created(AuthStates.waiting_contact)
 async def handle_contact(event: MessageCreated, context: MemoryContext):
     attachments = getattr(event.message.body, 'attachments', None) or []
+    logging.info("CONTACT_DEBUG total attachments=%d | body attrs=%s",
+                 len(attachments),
+                 [a for a in dir(event.message.body) if not a.startswith('_')])
     phone_raw = get_contact_phone(attachments)
 
     if not phone_raw:
         await event.message.answer("Пожалуйста, нажмите кнопку «Поделиться контактом».")
         return
 
+    # Оставляем только цифры и нормализуем: 8XXXXXXXXXX → 7XXXXXXXXXX
     phone = re.sub(r"\D", "", phone_raw)
+    if phone.startswith("8") and len(phone) == 11:
+        phone = "7" + phone[1:]
+    logging.info("CONTACT_DEBUG phone_raw=%s | phone_normalized=%s | in_db=%s",
+                 phone_raw, phone, phone in ALLOWED_NUMBERS)
     if phone in ALLOWED_NUMBERS:
         name = ALLOWED_NUMBERS[phone]
         await context.clear()

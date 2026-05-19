@@ -1,0 +1,9 @@
+# Конфиг с номерами телефонов — не публиковать
+allowed_numbers.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.log
