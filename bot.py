@@ -219,6 +219,14 @@ def get_photo_url(attachments) -> str | None:
     return None
 
 
+def get_peer(event) -> tuple:
+    """Return (chat_id, user_id) from any event type."""
+    recipient = getattr(getattr(event, 'message', None), 'recipient', None)
+    if recipient:
+        return (getattr(recipient, 'chat_id', None), getattr(recipient, 'user_id', None))
+    return (getattr(event, 'chat_id', None), getattr(event, 'user_id', None))
+
+
 def get_contact_phone(attachments) -> str | None:
     """Extract phone number from MAX contact attachment."""
     if not attachments:
@@ -836,32 +844,38 @@ async def cb_opening_menu(event: MessageCallback, context: MemoryContext):
 # ─── CHECK / FINISH ───────────────────────────────────────────────────────────
 
 async def do_check_measure(event, context: MemoryContext):
-    data = await context.get_data()
-    name    = data.get("client_name", "")
-    phone   = data.get("client_phone", "")
-    address = data.get("client_address", "")
-    openings = data.get("openings", [])
-    client_data = {
-        "client_name": name, "client_phone": phone, "client_address": address,
-        "openings": [{**op, "photo": "есть" if op["photos"] else "нет"} for op in openings]
-    }
-    img_path = generate_measurement_image(client_data)
-    caption = f"Имя: {name}\nТелефон: {phone}\nАдрес: {address}"
-    await bot.send_message(
-        chat_id=event.chat_id,
-        text=caption,
-        attachments=[InputMedia(path=img_path)]
-    )
-    os.remove(img_path)
-    await context.set_state(MeasureStates.check_measure)
-    await bot.send_message(
-        chat_id=event.chat_id,
-        text="Проверьте замер. Если всё правильно — «Завершить замер», иначе — «Редактировать замер».",
-        attachments=[kb(
-            [("Редактировать замер", "edit_measure")],
-            [("Завершить замер",     "finish_measure")],
-        )]
-    )
+    try:
+        data = await context.get_data()
+        name    = data.get("client_name", "")
+        phone   = data.get("client_phone", "")
+        address = data.get("client_address", "")
+        openings = data.get("openings", [])
+        client_data = {
+            "client_name": name, "client_phone": phone, "client_address": address,
+            "openings": [{**op, "photo": "есть" if op["photos"] else "нет"} for op in openings]
+        }
+        img_path = generate_measurement_image(client_data)
+        caption = f"Имя: {name}\nТелефон: {phone}\nАдрес: {address}"
+        chat_id, user_id = get_peer(event)
+        logging.info("do_check_measure peer: chat_id=%s user_id=%s", chat_id, user_id)
+        await bot.send_message(
+            chat_id=chat_id, user_id=user_id,
+            text=caption,
+            attachments=[InputMedia(path=img_path)]
+        )
+        os.remove(img_path)
+        await context.set_state(MeasureStates.check_measure)
+        await bot.send_message(
+            chat_id=chat_id, user_id=user_id,
+            text="Проверьте замер. Если всё правильно — «Завершить замер», иначе — «Редактировать замер».",
+            attachments=[kb(
+                [("Редактировать замер", "edit_measure")],
+                [("Завершить замер",     "finish_measure")],
+            )]
+        )
+    except Exception as e:
+        logging.error("Ошибка в do_check_measure: %s", e, exc_info=True)
+        await event.message.answer("Произошла ошибка при формировании замера. Попробуйте ещё раз или обратитесь к разработчику.")
 
 
 @dp.message_callback(MeasureStates.check_measure)
@@ -874,46 +888,51 @@ async def cb_check_measure(event: MessageCallback, context: MemoryContext):
 
 
 async def confirm_finish(event, context: MemoryContext):
-    data = await context.get_data()
-    name    = data.get("client_name", "")
-    phone   = data.get("client_phone", "")
-    address = data.get("client_address", "")
-    openings = data.get("openings", [])
-    authorized_name = data.get("authorized_name", "")
+    try:
+        data = await context.get_data()
+        name    = data.get("client_name", "")
+        phone   = data.get("client_phone", "")
+        address = data.get("client_address", "")
+        openings = data.get("openings", [])
+        authorized_name = data.get("authorized_name", "")
 
-    client_data = {
-        "client_name": name, "client_phone": phone, "client_address": address,
-        "openings": [{**op, "photo": "есть" if op["photos"] else "нет"} for op in openings]
-    }
-    img_path = generate_measurement_image(client_data)
-    await bot.send_message(
-        chat_id=TARGET_CHAT_ID,
-        text=f"Имя: {name}\nТелефон: {phone}\nАдрес: {address}",
-        attachments=[InputMedia(path=img_path)]
-    )
-    os.remove(img_path)
+        client_data = {
+            "client_name": name, "client_phone": phone, "client_address": address,
+            "openings": [{**op, "photo": "есть" if op["photos"] else "нет"} for op in openings]
+        }
+        img_path = generate_measurement_image(client_data)
+        await bot.send_message(
+            chat_id=TARGET_CHAT_ID,
+            text=f"Имя: {name}\nТелефон: {phone}\nАдрес: {address}",
+            attachments=[InputMedia(path=img_path)]
+        )
+        os.remove(img_path)
 
-    for i, op in enumerate(openings, start=1):
-        for j, photo_url in enumerate(op.get("photos", []), start=1):
-            overlay_text = f"Фото {j} проёма #{i} ({op['room']})"
-            try:
-                overlaid = await overlay_text_on_photo(photo_url, overlay_text)
-                await bot.send_message(
-                    chat_id=TARGET_CHAT_ID,
-                    attachments=[InputMedia(path=overlaid)]
-                )
-                os.remove(overlaid)
-            except Exception as e:
-                logging.error("Ошибка обработки фото: %s", e)
+        for i, op in enumerate(openings, start=1):
+            for j, photo_url in enumerate(op.get("photos", []), start=1):
+                overlay_text = f"Фото {j} проёма #{i} ({op['room']})"
+                try:
+                    overlaid = await overlay_text_on_photo(photo_url, overlay_text)
+                    await bot.send_message(
+                        chat_id=TARGET_CHAT_ID,
+                        attachments=[InputMedia(path=overlaid)]
+                    )
+                    os.remove(overlaid)
+                except Exception as e:
+                    logging.error("Ошибка обработки фото: %s", e)
 
-    await context.clear()
-    await context.update_data(authorized_name=authorized_name)
-    await context.set_state(MeasureStates.menu)
-    await bot.send_message(
-        chat_id=event.chat_id,
-        text="Замер успешно отправлен в рабочий чат. Вы можете начать новый замер.",
-        attachments=[kb([("Новый замер", "new_measure")])]
-    )
+        await context.clear()
+        await context.update_data(authorized_name=authorized_name)
+        await context.set_state(MeasureStates.menu)
+        chat_id, user_id = get_peer(event)
+        await bot.send_message(
+            chat_id=chat_id, user_id=user_id,
+            text="Замер успешно отправлен в рабочий чат. Вы можете начать новый замер.",
+            attachments=[kb([("Новый замер", "new_measure")])]
+        )
+    except Exception as e:
+        logging.error("Ошибка в confirm_finish: %s", e, exc_info=True)
+        await event.message.answer("Произошла ошибка при отправке замера. Попробуйте ещё раз или обратитесь к разработчику.")
 
 
 # ─── EDIT ─────────────────────────────────────────────────────────────────────
