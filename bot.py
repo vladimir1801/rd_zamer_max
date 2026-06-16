@@ -468,9 +468,11 @@ async def cb_door_type(event: MessageCallback, context: MemoryContext):
         await context.set_state(MeasureStates.enter_door_type_custom)
         await event.message.answer("Введите ваш вариант типа двери:")
         return
+    if p not in DOOR_TYPE_MAP:
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["door_type"] = DOOR_TYPE_MAP.get(p, p)
+    current["door_type"] = DOOR_TYPE_MAP[p]
     await context.update_data(current_opening=current)
     await ask_dimensions(event, context)
 
@@ -518,9 +520,11 @@ async def cb_canvas(event: MessageCallback, context: MemoryContext):
         await event.message.answer("Введите ваш вариант полотна:")
         return
     canvas_map = {"cv_600": "600", "cv_700": "700", "cv_800": "800"}
+    if p not in canvas_map:
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["canvas"] = canvas_map.get(p, p)
+    current["canvas"] = canvas_map[p]
     await context.update_data(current_opening=current)
     await ask_dobor(event, context)
 
@@ -554,9 +558,11 @@ async def cb_dobor(event: MessageCallback, context: MemoryContext):
         await event.message.answer("Введите ваш вариант добора:")
         return
     dobor_map = {"db_100": "100 мм", "db_150": "150 мм", "db_200": "200 мм", "db_no": "нет"}
+    if p not in dobor_map:
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["dobor"] = dobor_map.get(p, p)
+    current["dobor"] = dobor_map[p]
     await context.update_data(current_opening=current)
     if p == "db_no":
         current["dobor_count"] = "---"
@@ -594,9 +600,11 @@ async def cb_dobor_count(event: MessageCallback, context: MemoryContext):
         await event.message.answer("Введите ваш вариант кол-ва доборов:")
         return
     count_map = {"dc_1.5": "1,5", "dc_2.5": "2,5", "dc_3": "3", "dc_no": "нет"}
+    if p not in count_map:
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["dobor_count"] = count_map.get(p, p)
+    current["dobor_count"] = count_map[p]
     await context.update_data(current_opening=current)
     await ask_nalichniki(event, context)
 
@@ -640,9 +648,11 @@ async def cb_nalichniki(event: MessageCallback, context: MemoryContext):
         await event.message.answer("Введите ваш вариант кол-ва наличников:")
         return
     nl_map = {"nl_2.5": "2,5", "nl_5": "5", "nl_5.5": "5,5", "nl_6": "6", "nl_no": "нет"}
+    if p not in nl_map:
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["nalichniki"] = nl_map.get(p, p)
+    current["nalichniki"] = nl_map[p]
     await context.update_data(current_opening=current)
     await ask_threshold(event, context)
 
@@ -673,9 +683,12 @@ async def ask_threshold(event, context: MemoryContext):
 
 @dp.message_callback(MeasureStates.enter_threshold)
 async def cb_threshold(event: MessageCallback, context: MemoryContext):
+    p = event.callback.payload
+    if p not in ("th_yes", "th_no"):
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["threshold"] = {"th_yes": "да", "th_no": "нет"}.get(event.callback.payload, "")
+    current["threshold"] = {"th_yes": "да", "th_no": "нет"}[p]
     await context.update_data(current_opening=current)
     await ask_demontage(event, context)
 
@@ -690,9 +703,12 @@ async def ask_demontage(event, context: MemoryContext):
 
 @dp.message_callback(MeasureStates.enter_demontage)
 async def cb_demontage(event: MessageCallback, context: MemoryContext):
+    p = event.callback.payload
+    if p not in ("dm_yes", "dm_no"):
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["demontage"] = {"dm_yes": "да", "dm_no": "нет"}.get(event.callback.payload, "")
+    current["demontage"] = {"dm_yes": "да", "dm_no": "нет"}[p]
     await context.update_data(current_opening=current)
     await ask_opening(event, context)
 
@@ -727,9 +743,11 @@ async def cb_opening(event: MessageCallback, context: MemoryContext):
         "op_left": "Левое", "op_right": "Правое",
         "op_left_rev": "Левое рев.", "op_right_rev": "Правое рев."
     }
+    if p not in op_map:
+        return  # игнорируем нажатия со старых клавиатур других шагов
     data = await context.get_data()
     current = data["current_opening"]
-    current["opening"] = op_map.get(p, p)
+    current["opening"] = op_map[p]
     await context.update_data(current_opening=current)
     await ask_comment(event, context)
 
