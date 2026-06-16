@@ -46,6 +46,41 @@ bot = Bot(TOKEN)
 dp = Dispatcher()
 
 
+# ─── ERROR REPORTER ───────────────────────────────────────────────────────────
+# maxapi ловит исключения хендлеров и пишет их ТОЛЬКО в лог — для пользователя
+# это выглядит как «бот завис / не отвечает». Этот middleware перехватывает
+# любое исключение и дополнительно отправляет пользователю текст ошибки, чтобы
+# причину было видно прямо в чате, а не только в логах Railway.
+try:
+    from maxapi.filters.middleware import BaseMiddleware
+
+    class ErrorReporterMiddleware(BaseMiddleware):
+        async def __call__(self, handler, event_object, data):
+            try:
+                return await handler(event_object, data)
+            except Exception as e:
+                # HandlerException оборачивает исходное исключение в .cause
+                cause = getattr(e, "cause", None) or e
+                logging.error(
+                    "Перехвачено исключение хендлера: %r", cause, exc_info=cause
+                )
+                try:
+                    msg = getattr(event_object, "message", None)
+                    if msg is not None:
+                        await msg.answer(
+                            f"⚠ Ошибка: {type(cause).__name__}: {cause}"
+                        )
+                except Exception:
+                    logging.exception("Не удалось уведомить пользователя об ошибке")
+                raise
+
+    dp.register_outer_middleware(ErrorReporterMiddleware())
+    logging.info("ErrorReporterMiddleware зарегистрирован")
+except Exception:
+    # Если внутренний API maxapi изменится — бот всё равно должен стартовать.
+    logging.exception("Не удалось зарегистрировать ErrorReporterMiddleware")
+
+
 # ─── STATES ───────────────────────────────────────────────────────────────────
 
 class AuthStates(StatesGroup):
